@@ -12,6 +12,9 @@ from ultralytics.utils.torch_utils import autocast
 from .metrics import bbox_iou, probiou
 from .tal import bbox2dist
 
+# for SDAA
+import os
+TORCH_SDAA_AUTOLOAD = os.getenv("TORCH_SDAA_AUTOLOAD", None)
 
 class VarifocalLoss(nn.Module):
     """
@@ -202,6 +205,8 @@ class v8DetectionLoss:
         """Calculate the sum of the loss for box, cls and dfl multiplied by batch size."""
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
         feats = preds[1] if isinstance(preds, tuple) else preds
+        if TORCH_SDAA_AUTOLOAD == "cuda_migrate":
+            feats = [a.float() for a in feats]
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
             (self.reg_max * 4, self.nc), 1
         )
@@ -267,6 +272,8 @@ class v8SegmentationLoss(v8DetectionLoss):
         """Calculate and return the combined loss for detection and segmentation."""
         loss = torch.zeros(4, device=self.device)  # box, seg, cls, dfl
         feats, pred_masks, proto = preds if len(preds) == 3 else preds[1]
+        if TORCH_SDAA_AUTOLOAD == "cuda_migrate":
+            feats, pred_masks, proto = [a.float() for a in feats], pred_masks.float(), proto.float()
         batch_size, _, mask_h, mask_w = proto.shape  # batch size, number of masks, mask height, mask width
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
             (self.reg_max * 4, self.nc), 1
@@ -455,6 +462,8 @@ class v8PoseLoss(v8DetectionLoss):
         """Calculate the total loss and detach it for pose estimation."""
         loss = torch.zeros(5, device=self.device)  # box, cls, dfl, kpt_location, kpt_visibility
         feats, pred_kpts = preds if isinstance(preds[0], list) else preds[1]
+        if TORCH_SDAA_AUTOLOAD == "cuda_migrate":
+            feats, pred_kpts = [a.float() for a in feats], pred_kpts.float()
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
             (self.reg_max * 4, self.nc), 1
         )
@@ -634,6 +643,8 @@ class v8OBBLoss(v8DetectionLoss):
         """Calculate and return the loss for oriented bounding box detection."""
         loss = torch.zeros(3, device=self.device)  # box, cls, dfl
         feats, pred_angle = preds if isinstance(preds[0], list) else preds[1]
+        if TORCH_SDAA_AUTOLOAD == "cuda_migrate":
+            feats, pred_angle = [a.float() for a in feats], pred_angle.float()
         batch_size = pred_angle.shape[0]  # batch size, number of masks, mask height, mask width
         pred_distri, pred_scores = torch.cat([xi.view(feats[0].shape[0], self.no, -1) for xi in feats], 2).split(
             (self.reg_max * 4, self.nc), 1
